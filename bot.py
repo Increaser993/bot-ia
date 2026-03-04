@@ -38,7 +38,7 @@ async def on_message(message):
         }
 
         data = {
-            "model": "meta-llama/llama-3-8b-instruct:free",
+            "model": "mistralai/mistral-7b-instruct:free",
             "messages": [
                 {"role": "user", "content": prompt}
             ]
@@ -52,10 +52,8 @@ async def on_message(message):
                 return
 
             result = response.json()
-
             reply = result["choices"][0]["message"]["content"]
 
-            # Discord limita mensagem a 2000 caracteres
             await message.channel.send(reply[:2000])
 
         except Exception as e:
