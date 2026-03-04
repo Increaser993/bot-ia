@@ -1,6 +1,7 @@
 import os
 import discord
 import requests
+import time
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
@@ -17,6 +18,10 @@ client = discord.Client(intents=intents)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# 🔥 Controle de cooldown
+user_cooldowns = {}
+COOLDOWN_TIME = 10  # segundos entre usos por usuário
+
 @client.event
 async def on_ready():
     print(f"✅ Bot conectado como {client.user}")
@@ -27,6 +32,18 @@ async def on_message(message):
         return
 
     if message.content.startswith("!chat "):
+
+        # 🛑 Sistema anti-spam
+        user_id = message.author.id
+        now = time.time()
+
+        if user_id in user_cooldowns:
+            if now - user_cooldowns[user_id] < COOLDOWN_TIME:
+                await message.channel.send("⏳ Espere alguns segundos antes de usar novamente.")
+                return
+
+        user_cooldowns[user_id] = now
+
         prompt = message.content[6:]
         await message.channel.send("🤖 Pensando...")
 
@@ -40,12 +57,25 @@ async def on_message(message):
         data = {
             "model": "arcee-ai/trinity-large-preview:free",
             "messages": [
-                {"role": "user", "content": prompt}
-            ]
+                {
+                    "role": "system",
+                    "content": "Você é um assistente inteligente e responde sempre em português."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "max_tokens": 300,
+            "temperature": 0.7
         }
 
         try:
             response = requests.post(OPENROUTER_URL, headers=headers, json=data)
+
+            if response.status_code == 429:
+                await message.channel.send("🚦 Rate limit atingido. Aguarde alguns segundos.")
+                return
 
             if response.status_code != 200:
                 await message.channel.send(f"❌ Erro {response.status_code}: {response.text}")
@@ -57,6 +87,6 @@ async def on_message(message):
             await message.channel.send(reply[:2000])
 
         except Exception as e:
-            await message.channel.send(f"❌ Erro na requisição: {e}")
+            await message.channel.send(f"❌ Ero na requisição: {e}")
 
 client.run(DISCORD_TOKEN)
