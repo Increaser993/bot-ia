@@ -38,7 +38,7 @@ async def on_message(message):
         }
 
         data = {
-            "model": "mistralai/mistral-7b-instruct:free",
+            "model": "openai/gpt-5.3-chat",
             "messages": [
                 {"role": "user", "content": prompt}
             ]
