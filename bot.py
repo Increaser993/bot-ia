@@ -55,7 +55,7 @@ async def on_message(message):
         }
 
         data = {
-            "model": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+            "model": "arcee-ai/trinity-large-preview:free",
             "messages": [
                 {
                     "role": "system",
