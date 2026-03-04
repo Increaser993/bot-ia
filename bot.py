@@ -38,7 +38,7 @@ async def on_message(message):
         }
 
         data = {
-            "model": "openai/gpt-5.3-chat",
+            "model": "arcee-ai/trinity-large-preview:free",
             "messages": [
                 {"role": "user", "content": prompt}
             ]
