@@ -1,74 +1,46 @@
 import os
 import discord
-import requests
+import openai
 import asyncio
 
+# Pegando tokens do ambiente
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
-REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
+# Configurando intents para ler mensagens
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-async def upscale_image(image_url: str) -> str:
-    headers = {
-        "Authorization": f"Token {REPLICATE_API_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    json_data = {
-        "version": "latest",
-        "model": "nightmareai/real-esrgan",
-        "input": {
-            "image": image_url,
-            "scale": 2,
-            "face_enhance": False
-        }
-    }
-
-    try:
-        r = requests.post("https://api.replicate.com/v1/predictions", headers=headers, json=json_data)
-        if r.status_code != 201:
-            return f"Erro na requisição: {r.status_code} - {r.text}"
-
-        prediction = r.json()
-        prediction_url = prediction.get("urls", {}).get("get")
-        if not prediction_url:
-            return "Erro: não encontrei URL de status da predição."
-
-        # Espera o processamento terminar
-        while True:
-            status_res = requests.get(prediction_url, headers=headers).json()
-            status = status_res.get("status")
-            if status == "succeeded":
-                output = status_res.get("output")
-                if isinstance(output, list) and output:
-                    return output[0]
-                elif isinstance(output, str):
-                    return output
-                else:
-                    return "Erro: saída inesperada da API."
-            elif status in ["failed", "canceled"]:
-                return "Upscale IA falhou."
-            await asyncio.sleep(1)
-
-    except Exception as e:
-        return f"Erro interno: {str(e)}"
-
+# Evento ao conectar
 @client.event
 async def on_ready():
     print(f"Bot conectado como {client.user}")
 
+# Evento ao receber mensagem
 @client.event
 async def on_message(message):
     if message.author == client.user:
-        return
+        return  # Ignora mensagens do próprio bot
 
-    if message.attachments:
-        for att in message.attachments:
-            if any(att.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg']):
-                await message.channel.send("Recebi a imagem! Enviando para IA... ⏳")
-                result = await upscale_image(att.url)
-                await message.channel.send(result)
+    # Comando para ChatGPT
+    if message.content.startswith("!chat "):
+        prompt = message.content[6:]  # remove "!chat "
+        await message.channel.send("🤖 Formulando resposta.")
+
+        try:
+            # Chamada à API do OpenAI
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",  # ou "gpt-4" se você tiver acesso
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+                temperature=0.7
+            )
+            reply = response.choices[0].message.content
+            await message.channel.send(reply)
+        except Exception as e:
+            await message.channel.send(f"❌ Erro na API: {e}")
 
 client.run(DISCORD_TOKEN)
