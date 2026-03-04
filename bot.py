@@ -1,18 +1,49 @@
 import os
 import discord
 import requests
-from io import BytesIO
+import asyncio
 
-# Variáveis de ambiente
-TOKEN = os.environ.get("DISCORD_TOKEN")
+# Pegue seu token do Discord e Replicate das variáveis de ambiente
+DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
+REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN")
 
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-# Endpoint Waifu2x online (exemplo público grátis)
-WAIFU2X_API = "https://waifu2x.booru.pics/api"
+# Função para chamar o modelo Real-ESRGAN no Replicate
+async def upscale_image(image_url: str) -> str:
+    headers = {
+        "Authorization": f"Token {REPLICATE_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    json_data = {
+        "version": "latest",
+        "model": "nightmareai/real-esrgan",
+        "input": {
+            "image": image_url,
+            "scale": 2,
+            "face_enhance": False
+        }
+    }
+
+    r = requests.post("https://api.replicate.com/v1/predictions", headers=headers, json=json_data)
+    if r.status_code != 201:
+        return None
+
+    prediction_url = r.json()["urls"]["get"]
+
+    # Espera o processamento terminar
+    while True:
+        status_res = requests.get(prediction_url, headers=headers).json()
+        if status_res["status"] == "succeeded":
+            output_urls = status_res["output"]
+            enhanced_url = output_urls[0] if isinstance(output_urls, list) else output_urls
+            return enhanced_url
+        elif status_res["status"] in ["failed", "canceled"]:
+            return None
+        await asyncio.sleep(1)
 
 @client.event
 async def on_ready():
@@ -24,27 +55,13 @@ async def on_message(message):
         return
 
     if message.attachments:
-        for attachment in message.attachments:
-            if any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg']):
-                await message.channel.send("Recebido! Melhorando imagem… ⏳")
+        for att in message.attachments:
+            if any(att.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg']):
+                await message.channel.send("Recebi a imagem! Enviando para IA... ⏳")
+                enhanced_url = await upscale_image(att.url)
+                if enhanced_url:
+                    await message.channel.send(f"Imagem melhorada: {enhanced_url}")
+                else:
+                    await message.channel.send("Houve um erro ao processar a imagem.")
 
-                # Baixa a imagem
-                img_data = await attachment.read()
-
-                # Envia para Waifu2x API
-                files = {"image": (attachment.filename, BytesIO(img_data))}
-                data = {"scale": 2, "noise": 1}  # scale=2x, noise=leve (0-3)
-                try:
-                    r = requests.post(WAIFU2X_API, files=files, data=data)
-                    if r.status_code == 200:
-                        # Retorna a imagem
-                        output_filename = f"enhanced_{attachment.filename}"
-                        with open(output_filename, "wb") as f:
-                            f.write(r.content)
-                        await message.channel.send(file=discord.File(output_filename))
-                    else:
-                        await message.channel.send(f"Erro na Waifu2x API: {r.status_code}")
-                except Exception as e:
-                    await message.channel.send(f"Erro ao chamar Waifu2x: {e}")
-
-client.run(TOKEN)
+client.run(DISCORD_TOKEN)
