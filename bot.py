@@ -31,7 +31,7 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    if message.content.startswith("!chat "):
+    if message.content.startswith("!jeff "):
 
         # 🛑 Sistema anti-spam
         user_id = message.author.id
