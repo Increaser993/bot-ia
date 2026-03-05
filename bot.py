@@ -2,6 +2,7 @@ import os
 import discord
 import time
 import requests
+import openai
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 
