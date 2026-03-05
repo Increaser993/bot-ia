@@ -82,7 +82,7 @@ async def on_message(message):
         user_cooldowns[user_id] = now
 
         prompt = message.content[6:]
-        await message.channel.send("🤖 Processando...")
+        await message.channel.send("Pensando...")
 
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
