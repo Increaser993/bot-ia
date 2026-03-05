@@ -1,155 +1,70 @@
-import os
 import discord
 import requests
-import time
 import numpy as np
 import cv2
 import io
+import os
 
-# ==========================
-# VARIÁVEIS DE AMBIENTE
-# ==========================
-DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+TOKEN = os.environ.get("DISCORD_TOKEN")
 
-if not DISCORD_TOKEN:
+if not TOKEN:
     raise ValueError("DISCORD_TOKEN não definido!")
 
-if not OPENROUTER_API_KEY:
-    raise ValueError("OPENROUTER_API_KEY não definido!")
-
-# ==========================
-# CONFIG DO BOT
-# ==========================
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# ==========================
-# COOLDOWN IA
-# ==========================
-user_cooldowns = {}
-COOLDOWN_TIME = 10  # segundos
-
-# ==========================
-# FUNÇÃO MELHORAR IMAGEM
-# ==========================
+# 🔥 Função de melhoria profissional CPU
 def enhance_image(img, scale=4):
 
-    # Redução leve de ruído preservando bordas
-    img = cv2.bilateralFilter(img, 9, 75, 75)
-
-    # Upscale com melhor interpolação
+    # 1️⃣ Upscale com Lanczos (melhor interpolação CPU)
     height, width = img.shape[:2]
-    new_width = width * scale
-    new_height = height * scale
+    new_size = (width * scale, height * scale)
+    upscaled = cv2.resize(img, new_size, interpolation=cv2.INTER_LANCZOS4)
 
-    upscaled = cv2.resize(
-        img,
-        (new_width, new_height),
-        interpolation=cv2.INTER_LANCZOS4
-    )
+    # 2️⃣ Melhorar contraste local (CLAHE)
+    lab = cv2.cvtColor(upscaled, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
 
-    # Nitidez mais forte
-    kernel = np.array([
-        [-1, -1, -1],
-        [-1,  9, -1],
-        [-1, -1, -1]
-    ])
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l = clahe.apply(l)
 
-    sharpened = cv2.filter2D(upscaled, -1, kernel)
+    lab = cv2.merge((l, a, b))
+    contrast_img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
-    # Ajuste leve de contraste
-    alpha = 1.1
-    beta = 5
-    final = cv2.convertScaleAbs(sharpened, alpha=alpha, beta=beta)
+    # 3️⃣ Unsharp Mask balanceado (sem exagero)
+    gaussian = cv2.GaussianBlur(contrast_img, (0, 0), 1.5)
+    sharpened = cv2.addWeighted(contrast_img, 1.4, gaussian, -0.4, 0)
 
-    return final
+    return sharpened
 
-# ==========================
-# EVENTOS
-# ==========================
+
 @client.event
 async def on_ready():
-    print(f"✅ Bot conectado como {client.user}")
+    print(f"Bot conectado como {client.user}")
+
 
 @client.event
 async def on_message(message):
+
     if message.author == client.user:
         return
 
-    # ==========================
-    # COMANDO IA (!jeff)
-    # ==========================
-    if message.content.startswith("!jeff "):
-
-        user_id = message.author.id
-        now = time.time()
-
-        if user_id in user_cooldowns:
-            if now - user_cooldowns[user_id] < COOLDOWN_TIME:
-                await message.channel.send("⏳ Espere alguns segundos antes de usar novamente.")
-                return
-
-        user_cooldowns[user_id] = now
-
-        prompt = message.content[6:]
-        await message.channel.send("🤖 Processando...")
-
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "model": "arcee-ai/trinity-large-preview:free",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": 300,
-            "temperature": 0.7
-        }
-
-        try:
-            response = requests.post(OPENROUTER_URL, headers=headers, json=data)
-
-            if response.status_code == 429:
-                await message.channel.send("🚦 Rate limit atingido.")
-                return
-
-            if response.status_code != 200:
-                await message.channel.send(f"❌ Erro {response.status_code}")
-                return
-
-            result = response.json()
-            reply = result["choices"][0]["message"]["content"]
-
-            await message.channel.send(reply[:2000])
-
-        except Exception as e:
-            await message.channel.send(f"❌ Erro: {e}")
-
-        return
-
-    # ==========================
-    # COMANDO MELHORAR (!melhorar)
-    # ==========================
     if message.content.startswith("!melhorar"):
 
         partes = message.content.split()
         scale = 4  # padrão
 
-        # Se usuário digitou número
+        # 🎯 Verifica escala digitada
         if len(partes) > 1:
             try:
                 scale = int(partes[1])
                 if scale < 1 or scale > 8:
-                    await message.channel.send("❌ Escolha uma escala entre 1 e 8.")
+                    await message.channel.send("❌ Use escala entre 1 e 8.")
                     return
             except:
-                await message.channel.send("❌ Escala inválida. Use número. Ex: !melhorar 4")
+                await message.channel.send("❌ Escala inválida. Ex: !melhorar 4")
                 return
 
         if not message.attachments:
@@ -159,7 +74,7 @@ async def on_message(message):
         attachment = message.attachments[0]
 
         if not attachment.filename.lower().endswith((".png", ".jpg", ".jpeg")):
-            await message.channel.send("❌ Formato inválido. Use PNG ou JPG.")
+            await message.channel.send("❌ Use PNG ou JPG.")
             return
 
         await message.channel.send(f"🖼️ Melhorando imagem em x{scale}...")
@@ -171,7 +86,7 @@ async def on_message(message):
 
             result = enhance_image(img, scale=scale)
 
-            # 🔥 Limite automático para evitar erro 413
+            # 🔥 Limite máximo para evitar erro 413
             max_dimension = 3000
             h, w = result.shape[:2]
 
@@ -183,17 +98,27 @@ async def on_message(message):
                     interpolation=cv2.INTER_AREA
                 )
 
-            # Compressão JPG
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
-            _, buffer = cv2.imencode(".jpg", result, encode_param)
+            # 🔥 Compressão inteligente
+            quality = 95
+            while True:
+                encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
+                _, buffer = cv2.imencode(".jpg", result, encode_param)
+                size_mb = len(buffer) / (1024 * 1024)
 
-            file = discord.File(io.BytesIO(buffer.tobytes()), filename="enhanced.jpg")
+                if size_mb <= 7.5 or quality <= 60:
+                    break
+
+                quality -= 5
+
+            file = discord.File(
+                io.BytesIO(buffer.tobytes()),
+                filename="enhanced.jpg"
+            )
+
             await message.channel.send(file=file)
 
         except Exception as e:
             await message.channel.send(f"❌ Erro ao processar imagem: {e}")
 
-# ==========================
-# INICIA BOT
-# ==========================
-client.run(DISCORD_TOKEN)
+
+client.run(TOKEN)
