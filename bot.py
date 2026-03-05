@@ -4,6 +4,7 @@ import requests
 import time
 import numpy as np
 import cv2
+import io
 
 # ==========================
 # VARIÁVEIS DE AMBIENTE
@@ -33,9 +34,14 @@ user_cooldowns = {}
 COOLDOWN_TIME = 10  # segundos
 
 # ==========================
-# FUNÇÃO MELHORAR IMAGEM
+# FUNÇÃO MELHORAR IMAGEM (ULTRA CPU)
 # ==========================
 def enhance_image(img, scale=4):
+
+    # 1️⃣ Redução leve de ruído preservando bordas
+    img = cv2.bilateralFilter(img, 9, 75, 75)
+
+    # 2️⃣ Upscale com melhor interpolação
     height, width = img.shape[:2]
     new_width = width * scale
     new_height = height * scale
@@ -43,16 +49,24 @@ def enhance_image(img, scale=4):
     upscaled = cv2.resize(
         img,
         (new_width, new_height),
-        interpolation=cv2.INTER_CUBIC
+        interpolation=cv2.INTER_LANCZOS4
     )
 
-    kernel = np.array([[0, -1, 0],
-                       [-1, 5, -1],
-                       [0, -1, 0]])
+    # 3️⃣ Nitidez mais forte
+    kernel = np.array([
+        [-1, -1, -1],
+        [-1,  9, -1],
+        [-1, -1, -1]
+    ])
 
     sharpened = cv2.filter2D(upscaled, -1, kernel)
 
-    return sharpened
+    # 4️⃣ Ajuste leve de contraste e brilho
+    alpha = 1.1  # contraste
+    beta = 5     # brilho
+    final = cv2.convertScaleAbs(sharpened, alpha=alpha, beta=beta)
+
+    return final
 
 # ==========================
 # EVENTOS
@@ -143,10 +157,11 @@ async def on_message(message):
 
             result = enhance_image(img, scale=4)
 
-            output_file = "enhanced.png"
-            cv2.imwrite(output_file, result)
+            # 🔥 Envio direto em memória (sem salvar arquivo físico)
+            _, buffer = cv2.imencode(".png", result)
+            file = discord.File(io.BytesIO(buffer.tobytes()), filename="enhanced.png")
 
-            await message.channel.send(file=discord.File(output_file))
+            await message.channel.send(file=file)
 
         except Exception as e:
             await message.channel.send(f"❌ Erro ao processar imagem: {e}")
