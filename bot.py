@@ -141,7 +141,7 @@ async def on_message(message):
             nparr = np.frombuffer(img_data, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-            result = enhance_image(img, scale=18)
+            result = enhance_image(img, scale=8)
 
             output_file = "enhanced.png"
             cv2.imwrite(output_file, result)
